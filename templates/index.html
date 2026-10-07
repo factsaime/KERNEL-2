@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KERNEL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="bg-lines"></div>
+
+<!-- AUTH -->
+<main id="auth" class="center hidden">
+  <form id="auth-form" class="card">
+    <h1>KERNEL</h1>
+    <p class="muted">clear, free messenger</p>
+    <input id="a-user" placeholder="login" autocomplete="username" required>
+    <input id="a-pass" type="password" placeholder="password" autocomplete="current-password" required>
+    <div id="a-err" class="err"></div>
+    <button type="submit" id="a-submit">enter</button>
+    <button type="button" id="a-toggle" class="link">no account? register</button>
+  </form>
+</main>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <aside id="side">
+    <header>
+      <span class="logo">KERNEL</span>
+      <button id="btn-settings" class="sq" title="settings">⚙</button>
+    </header>
+    <input id="search" placeholder="find user…" autocomplete="off">
+    <div id="list"></div>
+    <footer class="muted" id="me-name"></footer>
+  </aside>
+
+  <section id="chat">
+    <header>
+      <button id="btn-back" class="sq only-mobile">←</button>
+      <span id="peer-name">—</span>
+    </header>
+    <div id="msgs"><div class="empty muted">select a chat</div></div>
+    <form id="send" class="hidden">
+      <input id="text" placeholder="message" autocomplete="off" maxlength="4000">
+      <button type="submit">send</button>
+    </form>
+  </section>
+</div>
+
+<!-- SETTINGS -->
+<div id="modal" class="center hidden">
+  <div class="card">
+    <h2>settings</h2>
+    <p class="muted" id="s-name"></p>
+    <input id="s-old" type="password" placeholder="current password" autocomplete="current-password">
+    <input id="s-new" type="password" placeholder="new password" autocomplete="new-password">
+    <button id="s-pass">change password</button>
+    <button id="s-clear">delete all my history</button>
+    <button id="s-logout">log out</button>
+    <div id="s-msg" class="err"></div>
+    <button id="s-close" class="link">close</button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
