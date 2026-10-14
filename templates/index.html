@@ -3,66 +3,108 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KERNEL</title>
+<title>Kernel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div class="bg-lines"></div>
+<svg class="bg-curves" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke="#000" stroke-opacity=".13" stroke-width="64" stroke-linecap="round">
+    <path d="M-120 120C220-60 520 40 700 330S1120 760 1560 560"/>
+    <path d="M980-80C760 160 760 420 920 620S1200 980 1500 900"/>
+    <path d="M-80 760C260 940 640 900 900 700"/>
+  </g>
+</svg>
 
 <!-- AUTH -->
 <main id="auth" class="center hidden">
-  <form id="auth-form" class="card">
-    <h1>KERNEL</h1>
-    <p class="muted">clear, free messenger</p>
-    <input id="a-user" placeholder="login" autocomplete="username" required>
-    <input id="a-pass" type="password" placeholder="password" autocomplete="current-password" required>
-    <div id="a-err" class="err"></div>
-    <button type="submit" id="a-submit">enter</button>
-    <button type="button" id="a-toggle" class="link">no account? register</button>
-  </form>
+  <div class="auth-row">
+    <form id="auth-form">
+      <svg class="logo-mark" viewBox="0 0 112 40" fill="none" stroke="#161616" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <path d="M1 20h8M23 20l10-1M47 14l8-6h12M52 24l6 8h18"/>
+        <circle cx="16" cy="20" r="7"/><circle cx="40" cy="18" r="7"/>
+        <circle cx="93" cy="8" r="3.5"/><circle cx="87" cy="32" r="3.5"/>
+      </svg>
+      <h1 id="a-title">Login</h1>
+      <p id="a-sub" class="sub">or register</p>
+      <input id="a-user" placeholder="enter your nickname" autocomplete="username" required>
+      <input id="a-pass" type="password" placeholder="enter your password" autocomplete="current-password" required>
+      <div id="a-err" class="err"></div>
+      <button type="submit" id="a-submit">Login</button>
+      <button type="button" id="a-toggle" class="link">or registration</button>
+    </form>
+    <div class="qr">qr code</div>
+  </div>
 </main>
 
 <!-- APP -->
 <div id="app" class="hidden">
   <aside id="side">
-    <header>
-      <span class="logo">KERNEL</span>
-      <button id="btn-settings" class="sq" title="settings">⚙</button>
-    </header>
+    <div class="side-head">It’s kernel</div>
     <input id="search" placeholder="find user…" autocomplete="off">
     <div id="list"></div>
-    <footer class="muted" id="me-name"></footer>
+    <nav>
+      <button data-tab="chats" class="pill active">Chats</button>
+      <button data-tab="profile" class="pill">Profile</button>
+      <button data-tab="settings" class="pill">Settings</button>
+    </nav>
   </aside>
 
-  <section id="chat">
-    <header>
-      <button id="btn-back" class="sq only-mobile">←</button>
-      <span id="peer-name">—</span>
+  <!-- chat -->
+  <section id="chat" class="view">
+    <header class="bar">
+      <button class="back only-mobile">←</button>
+      <span class="avatar sm" id="peer-av"></span>
+      <span id="peer-name"></span>
     </header>
     <div id="msgs"><div class="empty muted">select a chat</div></div>
     <form id="send" class="hidden">
-      <input id="text" placeholder="message" autocomplete="off" maxlength="4000">
-      <button type="submit">send</button>
+      <input id="text" placeholder="Type the message" autocomplete="off" maxlength="4000">
+      <button type="submit" class="plane" title="send" aria-label="send">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      </button>
     </form>
   </section>
-</div>
 
-<!-- SETTINGS -->
-<div id="modal" class="center hidden">
-  <div class="card">
-    <h2>settings</h2>
-    <p class="muted" id="s-name"></p>
-    <input id="s-old" type="password" placeholder="current password" autocomplete="current-password">
-    <input id="s-new" type="password" placeholder="new password" autocomplete="new-password">
-    <button id="s-pass">change password</button>
-    <button id="s-clear">delete all my history</button>
-    <button id="s-logout">log out</button>
-    <div id="s-msg" class="err"></div>
-    <button id="s-close" class="link">close</button>
-  </div>
+  <!-- profile -->
+  <section id="profile" class="view hidden">
+    <header class="bar only-mobile"><button class="back">←</button></header>
+    <div class="p-top">
+      <span class="avatar xl" id="p-av"></span>
+      <div class="handle" id="p-handle"></div>
+    </div>
+    <div class="seg">
+      <button id="p-edit" class="pill">change profile</button>
+      <button id="p-settings" class="pill">settings</button>
+    </div>
+    <div class="panel" id="p-info"></div>
+  </section>
+
+  <!-- settings -->
+  <section id="settings" class="view hidden">
+    <header class="bar only-mobile"><button class="back">←</button></header>
+    <div class="panel rows">
+      <div class="row-item" data-open="account"><span>Account</span><i>›</i></div>
+      <div class="sub-panel hidden" id="sp-account">
+        <input id="s-old" type="password" placeholder="current password" autocomplete="current-password">
+        <input id="s-new" type="password" placeholder="new password" autocomplete="new-password">
+        <button id="s-pass">change password</button>
+        <button id="s-logout">log out</button>
+      </div>
+      <div class="row-item" data-open="chat"><span>Chat settings</span><i>›</i></div>
+      <div class="sub-panel hidden" id="sp-chat">
+        <div class="muted">choose a theme</div>
+        <div class="themes" id="themes"></div>
+      </div>
+      <div class="row-item" data-open="data"><span>Data and memory</span><i>›</i></div>
+      <div class="sub-panel hidden" id="sp-data">
+        <button id="s-clear">delete all my history</button>
+      </div>
+      <div id="s-msg" class="err"></div>
+    </div>
+  </section>
 </div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>

@@ -68,6 +68,10 @@ def close_db(_):
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(SCHEMA)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+        for col in ("about", "address"):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
 
 
 def api(fn):
@@ -142,11 +146,27 @@ def logout():
 @app.get("/api/me")
 @api
 def me():
-    row = db().execute("SELECT id, username FROM users WHERE id = ?", (session["uid"],)).fetchone()
+    row = db().execute(
+        "SELECT id, username, about, address, created_at FROM users WHERE id = ?", (session["uid"],)
+    ).fetchone()
     if not row:
         session.clear()
         return jsonify(error="unauthorized"), 401
     return jsonify(dict(row))
+
+
+@app.post("/api/profile")
+@api
+def update_profile():
+    d = request.get_json(silent=True) or {}
+    about, address = str(d.get("about", "")).strip(), str(d.get("address", "")).strip()
+    if len(about) > 200 or len(address) > 100:
+        return jsonify(error="too long"), 400
+    db().execute(
+        "UPDATE users SET about = ?, address = ? WHERE id = ?", (about, address, session["uid"])
+    )
+    db().commit()
+    return jsonify(ok=True)
 
 
 @app.get("/api/users")
