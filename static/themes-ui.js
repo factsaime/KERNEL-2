@@ -1,4 +1,4 @@
-/* Kernel вЂ” theme picker + custom gradient builder.
+/* Kernel — theme picker + custom gradient builder.
    Depends on: window.KERNEL_THEMES (static/themes.js) and the global `api` from app.js. */
 (function () {
   const $id = (id) => document.getElementById(id);
@@ -60,16 +60,35 @@
     return againstBlack > againstWhite ? 'light' : 'dark';
   }
 
-  // A card label sits at the bottom edge (align-items: flex-end), so it is read
-  // against the gradient's last stop rather than the average colour.
-  function cardScheme(theme) {
+  // A card label sits at the bottom edge, but the gradient underneath it varies
+  // across the card. Score both the average colour and the last stop, require
+  // the chosen colour to work in the WORST of the two, and fall back to a scrim
+  // behind the label when neither colour is comfortably readable.
+  function labelStyle(theme) {
+    const against = (L, white) => (white ? 1.05 / (L + 0.05) : (L + 0.05) / 0.05);
+
+    const refs = [themeLuminance(theme)];
     const stops = (theme.stops || []).slice().sort((a, b) => a[1] - b[1]);
-    const last = stops.length ? parseHex(stops[stops.length - 1][0]) : null;
-    if (!last) return schemeFor(theme);
-    const L = relativeLuminance(last);
-    const againstWhite = 1.05 / (L + 0.05);
-    const againstBlack = (L + 0.05) / 0.05;
-    return againstBlack > againstWhite ? 'light' : 'dark';
+    if (stops.length) {
+      const lastRgb = parseHex(stops[stops.length - 1][0]);
+      if (lastRgb) refs.push(relativeLuminance(lastRgb));
+    }
+
+    const worst = (white) => Math.min(...refs.map((L) => against(L, white)));
+    const whiteScore = worst(true);
+    const darkScore = worst(false);
+    const useDark = darkScore > whiteScore;
+    const best = Math.max(whiteScore, darkScore);
+    const needsScrim = best < 3;
+
+    return {
+      color: useDark ? '#0e1116' : '#fff',
+      ring: useDark ? '#0e1116' : '#fff',
+      textShadow: needsScrim ? 'none'
+        : (useDark ? '0 1px 2px rgba(255, 255, 255, .5)' : '0 1px 3px rgba(0, 0, 0, .55)'),
+      scrim: !needsScrim ? ''
+        : (useDark ? 'rgba(255, 255, 255, .78)' : 'rgba(0, 0, 0, .55)'),
+    };
   }
 
   function buildCSS() {
@@ -190,7 +209,7 @@
       theme._armTimer = setTimeout(() => {
         if (!btn.isConnected) return;
         btn.classList.remove('armed');
-        btn.textContent = 'вњ•';
+        btn.textContent = '✕';
         btn.title = 'Удалить тему';
       }, 3500);
       return;
@@ -341,13 +360,16 @@
       pick.style.background = t.grad;
       // The label and selection ring sit on this card's own gradient, so they
       // are chosen per card rather than from the page-wide scheme.
-      const cardLight = cardScheme(t) === 'light';
-      pick.style.color = cardLight ? '#0e1116' : '#fff';
-      pick.style.textShadow = cardLight
-        ? '0 1px 2px rgba(255, 255, 255, .55)'
-        : '0 1px 3px rgba(0, 0, 0, .55)';
-      pick.style.setProperty('--ring', cardLight ? '#0e1116' : '#fff');
-      pick.append(document.createTextNode(t.name));
+      const label = labelStyle(t);
+      pick.style.color = label.color;
+      pick.style.textShadow = label.textShadow;
+      pick.style.setProperty('--ring', label.ring);
+
+      const name = document.createElement('span');
+      name.className = 'theme-name';
+      name.textContent = t.name;
+      if (label.scrim) name.style.background = label.scrim;
+      pick.append(name);
       pick.setAttribute('aria-pressed', String(t.id === active));
       pick.setAttribute('title', t.name + (isMine ? ' (моя тема)' : ''));
       pick.onclick = () => applyTheme(t.id);
@@ -363,7 +385,7 @@
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'theme-del';
-        del.textContent = 'вњ•';
+        del.textContent = '✕';
         del.title = 'Удалить тему';
         del.setAttribute('aria-label', 'Удалить тему ' + t.name);
         del.onclick = (e) => {
@@ -414,7 +436,7 @@
     const css = buildCSS();
     $id('tb-preview').style.background = css;
     $id('tb-code').textContent = css;
-    $id('tb-angle-val').textContent = state.angle + 'В°';
+    $id('tb-angle-val').textContent = state.angle + '°';
     $id('tb-angle').value = state.angle;
     $id('tb-angle-field').style.display = state.type === 'radial' ? 'none' : '';
     document.querySelectorAll('#tb-type button').forEach((b) =>
@@ -459,7 +481,7 @@
 
       const del = document.createElement('button');
       del.className = 'stop-del';
-      del.textContent = 'вњ•';
+      del.textContent = '✕';
       del.disabled = state.stops.length <= 2;
       del.setAttribute('aria-label', 'Удалить стоп ' + (i + 1));
       del.onclick = () => {

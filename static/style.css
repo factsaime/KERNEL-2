@@ -206,6 +206,8 @@ nav .pill.active { border-color: var(--chip-on-border); background: var(--chip-o
   background-size: cover;
 }
 .theme-card.sel .theme { outline: 2px solid var(--ring, #fff); outline-offset: 0; }
+/* The label gets a scrim when the gradient alone cannot carry enough contrast. */
+.theme-name { padding: 3px 8px; border-radius: 8px; line-height: 1.25; }
 .theme-tag { position: absolute; top: 5px; left: 6px; font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 6px; background: rgba(0, 0, 0, .62); color: #fff; pointer-events: none; }
 .theme-del {
   position: absolute; top: 4px; right: 5px; font-size: 11px; line-height: 1; color: #fff;
