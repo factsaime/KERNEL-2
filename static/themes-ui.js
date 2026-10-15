@@ -1,0 +1,626 @@
+/* Kernel — theme picker + custom gradient builder.
+   Depends on: window.KERNEL_THEMES (static/themes.js) and the global `api` from app.js. */
+(function () {
+  const $id = (id) => document.getElementById(id);
+  const LIB = window.KERNEL_THEMES || [];
+  const MAX_MY = 60;
+  const STORE = 'kernel-my-themes';
+
+  const state = {
+    type: 'linear',
+    angle: 135,
+    stops: [{ c: '#5b5bf5', p: 0 }, { c: '#a855f7', p: 50 }, { c: '#ec4899', p: 100 }],
+    editing: null,
+    filter: 'all',
+  };
+
+  let myThemes = [];
+  let active = '';
+
+  /* ---------- helpers ---------- */
+  const esc = (s) => String(s).replace(/[&<>"']/g, (m) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
+  const hexOk = (v) => /^#[0-9a-fA-F]{6}$/.test(v);
+
+  /* ---------- colour maths ----------
+     A gradient can be light or dark, and 49 of the 66 built-in themes are
+     light. The control palette (text, borders, panels) has to follow, or the
+     UI turns white-on-white. Everything below works in sRGB. */
+  const srgbToLinear = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+
+  function parseHex(hex) {
+    const h = String(hex).replace('#', '');
+    if (h.length !== 6) return null;
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+
+  function relativeLuminance(rgb) {
+    return 0.2126 * srgbToLinear(rgb[0]) + 0.7152 * srgbToLinear(rgb[1]) + 0.0722 * srgbToLinear(rgb[2]);
+  }
+
+  // Mean of a theme's stops, i.e. roughly what the eye averages the gradient to.
+  function themeLuminance(theme) {
+    const rgbs = (theme.stops || [])
+      .map((s) => parseHex(Array.isArray(s) ? s[0] : s))
+      .filter(Boolean);
+    if (!rgbs.length) return 0;
+    const mean = [0, 1, 2].map((i) => rgbs.reduce((a, r) => a + r[i], 0) / rgbs.length);
+    return relativeLuminance(mean);
+  }
+
+  // Whichever of white / near-black contrasts better against the theme.
+  function schemeFor(theme) {
+    const L = themeLuminance(theme);
+    const againstWhite = 1.05 / (L + 0.05);
+    const againstBlack = (L + 0.05) / 0.05;
+    return againstBlack > againstWhite ? 'light' : 'dark';
+  }
+
+  // A card label sits at the bottom edge, but the gradient underneath it varies
+  // across the card. Score both the average colour and the last stop, require
+  // the chosen colour to work in the WORST of the two, and fall back to a scrim
+  // behind the label when neither colour is comfortably readable.
+  function labelStyle(theme) {
+    const against = (L, white) => (white ? 1.05 / (L + 0.05) : (L + 0.05) / 0.05);
+
+    const refs = [themeLuminance(theme)];
+    const stops = (theme.stops || []).slice().sort((a, b) => a[1] - b[1]);
+    if (stops.length) {
+      const lastRgb = parseHex(stops[stops.length - 1][0]);
+      if (lastRgb) refs.push(relativeLuminance(lastRgb));
+    }
+
+    const worst = (white) => Math.min(...refs.map((L) => against(L, white)));
+    const whiteScore = worst(true);
+    const darkScore = worst(false);
+    const useDark = darkScore > whiteScore;
+    const best = Math.max(whiteScore, darkScore);
+    const needsScrim = best < 3;
+
+    return {
+      color: useDark ? '#0e1116' : '#fff',
+      ring: useDark ? '#0e1116' : '#fff',
+      textShadow: needsScrim ? 'none'
+        : (useDark ? '0 1px 2px rgba(255, 255, 255, .5)' : '0 1px 3px rgba(0, 0, 0, .55)'),
+      scrim: !needsScrim ? ''
+        : (useDark ? 'rgba(255, 255, 255, .78)' : 'rgba(0, 0, 0, .55)'),
+    };
+  }
+
+  function buildCSS() {
+    const stops = state.stops
+      .slice()
+      .sort((a, b) => a.p - b.p)
+      .map((s) => `${s.c} ${s.p}%`)
+      .join(', ');
+    if (state.type === 'radial') return `radial-gradient(circle at 50% 50%, ${stops})`;
+    if (state.type === 'conic') return `conic-gradient(from ${state.angle}deg at 50% 50%, ${stops})`;
+    return `linear-gradient(${state.angle}deg, ${stops})`;
+  }
+
+  const allThemes = () => [...LIB, ...myThemes];
+
+  function findTheme(id) {
+    return allThemes().find((t) => t.id === id) || null;
+  }
+
+  function toast(msg) {
+    let box = document.getElementById('kernel-toast');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'kernel-toast';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.textContent = msg;
+    box.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => box.classList.remove('show'), 2600);
+  }
+
+  /* ---------- my themes: local cache + account sync ---------- */
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(STORE);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+  }
+  function saveLocal(arr) {
+    try { localStorage.setItem(STORE, JSON.stringify(arr)); } catch {}
+  }
+
+  async function pullThemes() {
+    myThemes = loadLocal();
+    try {
+      const remote = await api('/themes');
+      if (Array.isArray(remote)) {
+        myThemes = remote;
+        saveLocal(remote);
+      }
+    } catch {}
+  }
+
+  async function pushThemes() {
+    saveLocal(myThemes);
+    try {
+      await api('/themes', 'POST', { themes: myThemes });
+      return true;
+    } catch (err) {
+      toast(err.message || 'could not save to account');
+      return false;
+    }
+  }
+
+  /* ---------- applying a theme ---------- */
+  function applyTheme(id, persist = true) {
+    const t = findTheme(id);
+    if (!t) return;
+    const root = document.documentElement.style;
+    if (t.grad.indexOf('linear-gradient') === 0) {
+      // Fast path: the app paints body with a two-stop gradient.
+      const stops = t.stops.slice().sort((a, b) => a.p - b.p);
+      root.setProperty('--a', stops[0][0]);
+      root.setProperty('--b', stops[stops.length - 1][0]);
+      root.setProperty('--bg', t.grad);
+    } else {
+      root.setProperty('--a', t.stops[0][0]);
+      root.setProperty('--b', t.stops[t.stops.length - 1][0]);
+      root.setProperty('--bg', t.grad);
+    }
+    root.setProperty('--bg-third', t.stops.length > 2 ? t.stops[1][0] : t.stops[0][0]);
+
+    // Flip the control palette to match how light this gradient is, otherwise
+    // white buttons, text and borders vanish on the light themes.
+    document.documentElement.dataset.scheme = schemeFor(t);
+
+    active = t.id;
+    try { localStorage.setItem('kernel-theme', t.id); } catch {}
+    markSelected();
+  }
+
+  function markSelected() {
+    document.querySelectorAll('.theme-card').forEach((card) => {
+      const on = card.dataset.t === active;
+      card.classList.toggle('sel', on);
+      const btn = card.querySelector('.theme');
+      if (btn) btn.setAttribute('aria-pressed', String(on));
+    });
+    document.querySelectorAll('.theme-fam').forEach((b) =>
+      b.classList.toggle('sel', b.dataset.f === state.filter));
+  }
+
+  /* ---------- deleting a theme ---------- */
+  // Two-step, no blocking dialog: the first click arms the button, the second
+  // deletes. The card animates out and is only then removed from the grid.
+  function deleteTheme(theme, card) {
+    const btn = card.querySelector('.theme-del');
+
+    if (btn && !btn.classList.contains('armed')) {
+      btn.classList.add('armed');
+      btn.textContent = 'удалить?';
+      btn.title = 'Нажмите ещё раз, чтобы удалить';
+      clearTimeout(theme._armTimer);
+      theme._armTimer = setTimeout(() => {
+        if (!btn.isConnected) return;
+        btn.classList.remove('armed');
+        btn.textContent = '✕';
+        btn.title = 'Удалить тему';
+      }, 3500);
+      return;
+    }
+
+    if (btn) {
+      btn.classList.remove('armed');
+      btn.disabled = true;
+    }
+
+    // Detach from the applied theme first so the page never keeps a
+    // background belonging to a theme that no longer exists.
+    if (active === theme.id) {
+      const fallback = LIB[0] ? LIB[0].id : null;
+      active = '';
+      if (fallback) applyTheme(fallback);
+      else {
+        document.documentElement.style.removeProperty('--bg');
+        try { localStorage.removeItem('kernel-theme'); } catch {}
+      }
+    }
+
+    myThemes = myThemes.filter((x) => x.id !== theme.id);
+    // Persist immediately; the grid update does not wait on this request.
+    pushThemes();
+
+    collapseCard(card, () => {
+      if (card.isConnected) card.remove();
+      if (!myThemes.length && state.filter === 'mine') showEmptyMine();
+      toast('Тема «' + theme.name + '» удалена');
+    });
+  }
+
+  // Animate a card out, then run the callback once it has finished.
+  // CSS transitions on grid items with `height: auto` do not interpolate, so
+  // the card is pinned to its measured size before being collapsed.
+  function collapseCard(card, done) {
+    if (motionOff()) { done(); return; }
+
+    const h = card.getBoundingClientRect().height;
+    card.style.height = h + 'px';
+    card.style.marginBottom = '0px';
+    void card.offsetHeight; // force reflow so the transition has a start value
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      done();
+    };
+
+    // Two frames: the class flip and the height change must land in separate
+    // style recalcs, otherwise the browser coalesces them into one paint.
+    requestAnimationFrame(() => {
+      card.classList.add('removing');
+      card.style.height = '0px';
+      card.style.marginBottom = '-10px';
+    });
+
+    card.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'height' || e.propertyName === 'opacity') finish();
+    });
+    setTimeout(finish, 500); // fallback if transitionend never fires
+  }
+
+  // Fade a freshly added card in.
+  function revealCard(card) {
+    if (motionOff()) return;
+    card.classList.add('appearing');
+    card.addEventListener('animationend', () => card.classList.remove('appearing'), { once: true });
+  }
+
+  function showEmptyMine() {
+    const box = $id('themes');
+    if (!box) return;
+    const p = document.createElement('div');
+    p.className = 'muted theme-none';
+    p.textContent = 'Своих тем пока нет';
+    box.replaceChildren(p);
+  }
+
+  // The app owns the motion setting (see the switch in Chat settings). It is
+  // deliberately not tied to prefers-reduced-motion: Windows reports "client
+  // area animations off" there, which used to disable every transition silently.
+  function motionOff() {
+    return document.documentElement.dataset.motion === 'off';
+  }
+
+  const MOTION_KEY = 'kernel-motion';
+
+  function setMotion(on) {
+    document.documentElement.dataset.motion = on ? 'on' : 'off';
+    try { localStorage.setItem(MOTION_KEY, on ? 'on' : 'off'); } catch {}
+    const box = $id('motion-toggle');
+    if (box) box.checked = on;
+  }
+
+  /* ---------- render: family chips ---------- */
+  function renderFams() {
+    const box = $id('theme-fams');
+    if (!box) return;
+    const fams = ['all', ...[...new Set(LIB.map((t) => t.fam))], 'mine'];
+    box.replaceChildren(...fams.map((f) => {
+      const b = document.createElement('button');
+      b.className = 'theme-fam' + (state.filter === f ? ' sel' : '');
+      b.dataset.f = f;
+      b.textContent = f === 'all' ? 'Все' : f === 'mine' ? 'Мои' : f;
+      b.onclick = () => { state.filter = f; renderGrid(); markSelected(); };
+      return b;
+    }));
+  }
+
+  /* ---------- render: theme grid ---------- */
+  function renderGrid() {
+    const box = $id('themes');
+    if (!box) return;
+    const q = ($id('theme-search')?.value || '').trim().toLowerCase();
+
+    let list = allThemes();
+    if (state.filter === 'mine') list = myThemes;
+    else if (state.filter !== 'all') list = list.filter((t) => t.fam === state.filter);
+    if (q) {
+      list = list.filter((t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.fam.toLowerCase().includes(q) ||
+        t.id.includes(q) ||
+        t.stops.some(([c]) => c.includes(q)));
+    }
+
+    const mineIds = new Set(myThemes.map((t) => t.id));
+    const frag = document.createDocumentFragment();
+
+    list.forEach((t) => {
+      const isMine = mineIds.has(t.id);
+
+      // A card is a wrapper, not a button: nesting the delete control inside
+      // a <button> is invalid and makes its clicks ambiguous.
+      const card = document.createElement('div');
+      card.className = 'theme-card' + (t.id === active ? ' sel' : '');
+      card.dataset.t = t.id;
+
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'theme';
+      pick.dataset.t = t.id;
+      pick.style.setProperty('--ta', t.stops[0][0]);
+      pick.style.setProperty('--tb', t.stops[t.stops.length - 1][0]);
+      pick.style.background = t.grad;
+      // The label and selection ring sit on this card's own gradient, so they
+      // are chosen per card rather than from the page-wide scheme.
+      const label = labelStyle(t);
+      pick.style.color = label.color;
+      pick.style.textShadow = label.textShadow;
+      pick.style.setProperty('--ring', label.ring);
+
+      const name = document.createElement('span');
+      name.className = 'theme-name';
+      name.textContent = t.name;
+      if (label.scrim) name.style.background = label.scrim;
+      pick.append(name);
+      pick.setAttribute('aria-pressed', String(t.id === active));
+      pick.setAttribute('title', t.name + (isMine ? ' (моя тема)' : ''));
+      pick.onclick = () => applyTheme(t.id);
+      card.append(pick);
+
+      if (isMine) {
+        revealCard(card);
+        const tag = document.createElement('span');
+        tag.className = 'theme-tag';
+        tag.textContent = 'МОЯ';
+        card.append(tag);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'theme-del';
+        del.textContent = '✕';
+        del.title = 'Удалить тему';
+        del.setAttribute('aria-label', 'Удалить тему ' + t.name);
+        del.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          deleteTheme(t, card);
+        };
+        card.append(del);
+      }
+
+      frag.append(card);
+    });
+
+    if (!list.length) {
+      const p = document.createElement('div');
+      p.className = 'muted theme-none';
+      p.textContent = q ? 'Ничего не найдено' : 'Здесь пока пусто';
+      frag.append(p);
+    }
+    box.replaceChildren(frag);
+  }
+
+  /* ---------- builder panel ---------- */
+  function openBuilder(theme) {
+    const panel = $id('theme-builder');
+    if (!panel) return;
+    if (theme) {
+      state.stops = theme.stops.map(([c, p]) => ({ c, p }));
+      state.angle = theme.angle != null ? theme.angle : 135;
+      state.type = theme.grad.startsWith('radial') ? 'radial'
+        : theme.grad.startsWith('conic') ? 'conic' : 'linear';
+      state.editing = theme.id;
+      $id('tb-name').value = theme.name;
+    } else {
+      state.editing = null;
+      $id('tb-name').value = '';
+    }
+    panel.classList.remove('hidden');
+    renderBuilder();
+  }
+
+  function closeBuilder() {
+    const panel = $id('theme-builder');
+    if (panel) panel.classList.add('hidden');
+  }
+
+  function renderBuilder() {
+    const css = buildCSS();
+    $id('tb-preview').style.background = css;
+    $id('tb-code').textContent = css;
+    $id('tb-angle-val').textContent = state.angle + '°';
+    $id('tb-angle').value = state.angle;
+    $id('tb-angle-field').style.display = state.type === 'radial' ? 'none' : '';
+    document.querySelectorAll('#tb-type button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.type === state.type)));
+
+    $id('tb-stops').replaceChildren(...state.stops.map((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'stop-row';
+
+      const pick = document.createElement('label');
+      pick.className = 'stop-pick';
+      pick.style.setProperty('--c', s.c);
+      const col = document.createElement('input');
+      col.type = 'color';
+      col.value = s.c;
+      col.setAttribute('aria-label', 'Цвет ' + (i + 1));
+      col.oninput = () => { state.stops[i].c = col.value; renderBuilder(); };
+      pick.append(col);
+
+      const hex = document.createElement('input');
+      hex.className = 'stop-hex';
+      hex.value = s.c.toUpperCase();
+      hex.maxLength = 7;
+      hex.spellcheck = false;
+      hex.setAttribute('aria-label', 'HEX ' + (i + 1));
+      hex.oninput = () => {
+        if (hexOk(hex.value)) { state.stops[i].c = hex.value.toLowerCase(); renderBuilder(); }
+      };
+
+      const pos = document.createElement('input');
+      pos.className = 'stop-pos';
+      pos.type = 'number';
+      pos.min = 0; pos.max = 100; pos.step = 1;
+      pos.value = s.p;
+      pos.setAttribute('aria-label', 'Позиция ' + (i + 1));
+      pos.oninput = () => {
+        const v = Math.max(0, Math.min(100, Number(pos.value) || 0));
+        state.stops[i].p = v;
+        $id('tb-preview').style.background = buildCSS();
+        $id('tb-code').textContent = buildCSS();
+      };
+
+      const del = document.createElement('button');
+      del.className = 'stop-del';
+      del.textContent = '✕';
+      del.disabled = state.stops.length <= 2;
+      del.setAttribute('aria-label', 'Удалить стоп ' + (i + 1));
+      del.onclick = () => {
+        if (state.stops.length <= 2) return;
+        state.stops.splice(i, 1);
+        renderBuilder();
+      };
+
+      row.append(pick, hex, pos, del);
+      return row;
+    }));
+  }
+
+  function slug(name, taken) {
+    // Cyrillic (and any non-Latin) names must still yield a stable, readable id.
+    const translit = {
+      а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
+      и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+      с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch',
+      ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+    };
+    const latin = name
+      .toLowerCase()
+      .split('')
+      .map((ch) => (translit[ch] !== undefined ? translit[ch] : ch))
+      .join('')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    // Fall back to a short hash when nothing transliterable is left.
+    let base = latin.slice(0, 30);
+    if (!base) {
+      let h = 0;
+      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+      base = 'theme-' + h.toString(36);
+    }
+    base = 'my-' + base;
+
+    let id = base, n = 2;
+    while (taken.has(id)) id = base + '-' + n++;
+    return id;
+  }
+
+  async function saveTheme() {
+    const name = ($id('tb-name').value || '').trim();
+    if (!name) { toast('Введите название темы'); return; }
+    if (name.length > 40) { toast('Название: максимум 40 символов'); return; }
+
+    const taken = new Set(allThemes().filter((t) => t.id !== state.editing).map((t) => t.id));
+    const id = state.editing || slug(name, taken);
+    if (taken.has(id)) { toast('Такая тема уже есть'); return; }
+
+    const theme = {
+      id,
+      name,
+      fam: 'Моя',
+      angle: state.angle,
+      stops: state.stops.map((s) => [s.c.toLowerCase(), Math.round(s.p)]),
+      grad: buildCSS(),
+    };
+
+    const idx = myThemes.findIndex((t) => t.id === id);
+    if (idx >= 0) myThemes[idx] = theme;
+    else {
+      if (myThemes.length >= MAX_MY) { toast('Максимум ' + MAX_MY + ' своих тем'); return; }
+      myThemes.unshift(theme);
+    }
+
+    if (await pushThemes()) toast('«' + name + '» сохранена в аккаунте');
+    applyTheme(id);
+    closeBuilder();
+    // A new theme has family "Моя": if the active filter would hide it,
+    // switch to "Мои" so the user sees what they just saved.
+    if (state.filter !== 'all' && state.filter !== 'mine') {
+      state.filter = 'mine';
+      renderFams();
+    }
+    renderGrid();
+  }
+
+  /* ---------- wiring ---------- */
+  function init() {
+    if (!$id('themes')) return;
+
+    // Motion switch: on by default, and independent of the OS setting.
+    const motionBox = $id('motion-toggle');
+    if (motionBox) {
+      motionBox.checked = document.documentElement.dataset.motion !== 'off';
+      motionBox.onchange = () => setMotion(motionBox.checked);
+    }
+
+    $id('theme-search').oninput = renderGrid;
+    $id('theme-new').onclick = () => openBuilder(null);
+    $id('tb-close').onclick = closeBuilder;
+    $id('tb-save').onclick = saveTheme;
+    $id('tb-random').onclick = () => {
+      const hue = () => Math.floor(Math.random() * 360);
+      const hsl2hex = (h, s, l) => {
+        s /= 100; l /= 100;
+        const k = (n) => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        const to = (x) => Math.round(255 * x).toString(16).padStart(2, '0');
+        return '#' + to(f(0)) + to(f(8)) + to(f(4));
+      };
+      state.stops = [0, 50, 100].map((p) => ({ c: hsl2hex(hue(), 60 + Math.random() * 35, 25 + p * 0.35), p }));
+      state.angle = Math.floor(Math.random() * 360);
+      renderBuilder();
+    };
+    $id('tb-angle').oninput = () => {
+      state.angle = Number($id('tb-angle').value);
+      renderBuilder();
+    };
+    document.querySelectorAll('#tb-type button').forEach((b) => {
+      b.onclick = () => { state.type = b.dataset.type; renderBuilder(); };
+    });
+    $id('tb-add').onclick = () => {
+      if (state.stops.length >= 6) { toast('Максимум 6 стопов'); return; }
+      const last = state.stops[state.stops.length - 1];
+      state.stops.push({ c: last.c, p: Math.min(100, last.p) });
+      renderBuilder();
+    };
+
+    renderFams();
+    renderGrid();
+    // Restore the last theme; fall back to the first of the library. A stored
+    // id may be stale (for example a deleted custom theme), so verify it first.
+    applyTheme((() => {
+      let stored = null;
+      try { stored = localStorage.getItem('kernel-theme'); } catch {}
+      if (stored && findTheme(stored)) return stored;
+      return LIB[0] ? LIB[0].id : null;
+    })(), false);
+    pullThemes().then(renderGrid);
+
+    // Expose for app.js after login.
+    window.kernelThemes = { pull: pullThemes, render: renderGrid, apply: applyTheme };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
