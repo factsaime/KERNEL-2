@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version) }}">
 </head>
 <body>
 <svg class="bg-curves" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -148,8 +148,8 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='themes.js') }}"></script>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
-<script src="{{ url_for('static', filename='themes-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='themes.js', v=asset_version) }}"></script>
+<script src="{{ url_for('static', filename='app.js', v=asset_version) }}"></script>
+<script src="{{ url_for('static', filename='themes-ui.js', v=asset_version) }}"></script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -49,6 +50,36 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
 )
+
+
+def asset_version() -> str:
+    """Short hash of the static assets, so a new build busts browser caches."""
+    h = hashlib.sha1()
+    for name in sorted(os.listdir(os.path.join(BASE, "static"))):
+        path = os.path.join(BASE, "static", name)
+        if os.path.isfile(path):
+            h.update(name.encode())
+            h.update(str(os.path.getmtime(path)).encode())
+    return h.hexdigest()[:10]
+
+
+ASSET_VERSION = asset_version()
+
+
+@app.context_processor
+def inject_asset_version():
+    return {"asset_version": ASSET_VERSION}
+
+
+@app.after_request
+def add_cache_headers(response):
+    """Static files are versioned by ?v=, so cache them hard; pages never."""
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 def db():

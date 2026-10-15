@@ -64,8 +64,18 @@ function setTab(name, enterMain = true) {
   document.querySelectorAll('nav .pill').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   ['chat', 'profile', 'settings'].forEach((v) => $(v).classList.toggle('hidden', v !== (name === 'chats' ? 'chat' : name)));
   if (name === 'profile') renderProfile();
-  if (enterMain && name !== 'chats') $('app').classList.add('in-main');
-  if (name === 'chats' && !peer) $('app').classList.remove('in-main');
+  // Re-pull custom themes whenever settings is opened, so the grid reflects
+  // the account instead of a stale first load.
+  if (name === 'settings' && window.kernelThemes) {
+    window.kernelThemes.pull().then(() => window.kernelThemes.render());
+  }
+  // Sidebar tabs (Profile/Settings) always open the main pane; the Chats tab
+  // only does so once a conversation is actually selected.
+  if (name === 'chats') {
+    if (!peer) $('app').classList.remove('in-main');
+  } else if (enterMain) {
+    $('app').classList.add('in-main');
+  }
 }
 document.querySelectorAll('nav .pill').forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
 document.querySelectorAll('.back').forEach((b) => (b.onclick = () => { $('app').classList.remove('in-main'); if (tab === 'chats') peer = null; loadList(); }));
@@ -161,11 +171,19 @@ $('p-settings').onclick = () => setTab('settings');
 
 /* ---------- settings ---------- */
 const sMsg = (t) => { $('s-msg').textContent = t; };
-document.querySelectorAll('.row-item').forEach((r) => (r.onclick = () => {
-  const p = $('sp-' + r.dataset.open); const open = p.classList.contains('hidden');
-  document.querySelectorAll('.sub-panel').forEach((x) => x.classList.add('hidden'));
-  p.classList.toggle('hidden', !open); sMsg('');
-}));
+
+// Accordion: exactly one section open at a time, and clicking an open
+// section closes it. Rows are matched to their own panel only.
+document.querySelectorAll('.row-item').forEach((r) => {
+  r.onclick = () => {
+    const panel = r.dataset.open ? $('sp-' + r.dataset.open) : null;
+    if (!panel) return;
+    const wasOpen = !panel.classList.contains('hidden');
+    document.querySelectorAll('.sub-panel').forEach((x) => x.classList.add('hidden'));
+    if (!wasOpen) panel.classList.remove('hidden');
+    sMsg('');
+  };
+});
 $('s-pass').onclick = async () => {
   try {
     await api('/settings/password', 'POST', { old: $('s-old').value, new: $('s-new').value });
