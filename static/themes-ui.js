@@ -122,6 +122,106 @@
       b.classList.toggle('sel', b.dataset.f === state.filter));
   }
 
+  /* ---------- deleting a theme ---------- */
+  // Two-step, no blocking dialog: the first click arms the button, the second
+  // deletes. The card animates out and is only then removed from the grid.
+  function deleteTheme(theme, card) {
+    const btn = card.querySelector('.theme-del');
+
+    if (btn && !btn.classList.contains('armed')) {
+      btn.classList.add('armed');
+      btn.textContent = 'удалить?';
+      btn.title = 'Нажмите ещё раз, чтобы удалить';
+      clearTimeout(theme._armTimer);
+      theme._armTimer = setTimeout(() => {
+        if (!btn.isConnected) return;
+        btn.classList.remove('armed');
+        btn.textContent = '✕';
+        btn.title = 'Удалить тему';
+      }, 3500);
+      return;
+    }
+
+    if (btn) {
+      btn.classList.remove('armed');
+      btn.disabled = true;
+    }
+
+    // Detach from the applied theme first so the page never keeps a
+    // background belonging to a theme that no longer exists.
+    if (active === theme.id) {
+      const fallback = LIB[0] ? LIB[0].id : null;
+      active = '';
+      if (fallback) applyTheme(fallback);
+      else {
+        document.documentElement.style.removeProperty('--bg');
+        try { localStorage.removeItem('kernel-theme'); } catch {}
+      }
+    }
+
+    myThemes = myThemes.filter((x) => x.id !== theme.id);
+    // Persist immediately; the grid update does not wait on this request.
+    pushThemes();
+
+    collapseCard(card, () => {
+      if (card.isConnected) card.remove();
+      if (!myThemes.length && state.filter === 'mine') showEmptyMine();
+      toast('Тема «' + theme.name + '» удалена');
+    });
+  }
+
+  // Animate a card out, then run the callback once it has finished.
+  // CSS transitions on grid items with `height: auto` do not interpolate, so
+  // the card is pinned to its measured size before being collapsed.
+  function collapseCard(card, done) {
+    if (reducedMotion()) { done(); return; }
+
+    const h = card.getBoundingClientRect().height;
+    card.style.height = h + 'px';
+    card.style.marginBottom = '0px';
+    void card.offsetHeight; // force reflow so the transition has a start value
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      done();
+    };
+
+    // Two frames: the class flip and the height change must land in separate
+    // style recalcs, otherwise the browser coalesces them into one paint.
+    requestAnimationFrame(() => {
+      card.classList.add('removing');
+      card.style.height = '0px';
+      card.style.marginBottom = '-10px';
+    });
+
+    card.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'height' || e.propertyName === 'opacity') finish();
+    });
+    setTimeout(finish, 500); // fallback if transitionend never fires
+  }
+
+  // Fade a freshly added card in.
+  function revealCard(card) {
+    if (reducedMotion()) return;
+    card.classList.add('appearing');
+    card.addEventListener('animationend', () => card.classList.remove('appearing'), { once: true });
+  }
+
+  function showEmptyMine() {
+    const box = $id('themes');
+    if (!box) return;
+    const p = document.createElement('div');
+    p.className = 'muted theme-none';
+    p.textContent = 'Своих тем пока нет';
+    box.replaceChildren(p);
+  }
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
   /* ---------- render: family chips ---------- */
   function renderFams() {
     const box = $id('theme-fams');
@@ -180,6 +280,7 @@
       card.append(pick);
 
       if (isMine) {
+        revealCard(card);
         const tag = document.createElement('span');
         tag.className = 'theme-tag';
         tag.textContent = 'МОЯ';
@@ -194,17 +295,7 @@
         del.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (!confirm('Удалить тему «' + t.name + '»?')) return;
-          myThemes = myThemes.filter((x) => x.id !== t.id);
-          // Move the applied theme off the deleted one before it disappears.
-          if (active === t.id) {
-            const fallback = LIB[0] ? LIB[0].id : null;
-            active = '';
-            if (fallback) applyTheme(fallback);
-            else document.documentElement.style.removeProperty('--bg');
-          }
-          pushThemes();
-          renderGrid();
+          deleteTheme(t, card);
         };
         card.append(del);
       }
@@ -413,8 +504,13 @@
 
     renderFams();
     renderGrid();
+    // Restore the last theme; fall back to the first of the library. A stored
+    // id may be stale (for example a deleted custom theme), so verify it first.
     applyTheme((() => {
-      try { return localStorage.getItem('kernel-theme') || 'red'; } catch { return 'red'; }
+      let stored = null;
+      try { stored = localStorage.getItem('kernel-theme'); } catch {}
+      if (stored && findTheme(stored)) return stored;
+      return LIB[0] ? LIB[0].id : null;
     })(), false);
     pullThemes().then(renderGrid);
 
