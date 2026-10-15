@@ -112,8 +112,12 @@
   }
 
   function markSelected() {
-    document.querySelectorAll('.theme').forEach((b) =>
-      b.classList.toggle('sel', b.dataset.t === active));
+    document.querySelectorAll('.theme-card').forEach((card) => {
+      const on = card.dataset.t === active;
+      card.classList.toggle('sel', on);
+      const btn = card.querySelector('.theme');
+      if (btn) btn.setAttribute('aria-pressed', String(on));
+    });
     document.querySelectorAll('.theme-fam').forEach((b) =>
       b.classList.toggle('sel', b.dataset.f === state.filter));
   }
@@ -154,34 +158,58 @@
     const frag = document.createDocumentFragment();
 
     list.forEach((t) => {
-      const b = document.createElement('button');
-      b.className = 'theme' + (t.id === active ? ' sel' : '');
-      b.dataset.t = t.id;
-      b.style.setProperty('--ta', t.stops[0][0]);
-      b.style.setProperty('--tb', t.stops[t.stops.length - 1][0]);
-      b.style.background = t.grad;
-      b.append(document.createTextNode(t.name));
-      b.onclick = () => applyTheme(t.id);
+      const isMine = mineIds.has(t.id);
 
-      if (mineIds.has(t.id)) {
-        b.append(Object.assign(document.createElement('span'), {
-          className: 'theme-tag', textContent: 'МОЯ',
-        }));
-        const del = document.createElement('span');
+      // A card is a wrapper, not a button: nesting the delete control inside
+      // a <button> is invalid and makes its clicks ambiguous.
+      const card = document.createElement('div');
+      card.className = 'theme-card' + (t.id === active ? ' sel' : '');
+      card.dataset.t = t.id;
+
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'theme';
+      pick.dataset.t = t.id;
+      pick.style.setProperty('--ta', t.stops[0][0]);
+      pick.style.setProperty('--tb', t.stops[t.stops.length - 1][0]);
+      pick.style.background = t.grad;
+      pick.append(document.createTextNode(t.name));
+      pick.setAttribute('aria-pressed', String(t.id === active));
+      pick.setAttribute('title', t.name + (isMine ? ' (моя тема)' : ''));
+      pick.onclick = () => applyTheme(t.id);
+      card.append(pick);
+
+      if (isMine) {
+        const tag = document.createElement('span');
+        tag.className = 'theme-tag';
+        tag.textContent = 'МОЯ';
+        card.append(tag);
+
+        const del = document.createElement('button');
+        del.type = 'button';
         del.className = 'theme-del';
         del.textContent = '✕';
         del.title = 'Удалить тему';
+        del.setAttribute('aria-label', 'Удалить тему ' + t.name);
         del.onclick = (e) => {
+          e.preventDefault();
           e.stopPropagation();
           if (!confirm('Удалить тему «' + t.name + '»?')) return;
           myThemes = myThemes.filter((x) => x.id !== t.id);
+          // Move the applied theme off the deleted one before it disappears.
+          if (active === t.id) {
+            const fallback = LIB[0] ? LIB[0].id : null;
+            active = '';
+            if (fallback) applyTheme(fallback);
+            else document.documentElement.style.removeProperty('--bg');
+          }
           pushThemes();
-          if (active === t.id) applyTheme('red');
           renderGrid();
         };
-        b.append(del);
+        card.append(del);
       }
-      frag.append(b);
+
+      frag.append(card);
     });
 
     if (!list.length) {

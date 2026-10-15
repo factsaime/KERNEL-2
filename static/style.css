@@ -97,11 +97,12 @@ nav .pill.active { border-color: rgba(255, 255, 255, .6); background: rgba(255, 
 .row-item:hover { background: rgba(0, 0, 0, .35); }
 .sub-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: rgba(0, 0, 0, .15); border-radius: 12px; }
 .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 46vh; overflow-y: auto; padding: 2px; }
-.theme { position: relative; height: 64px; border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; display: flex; align-items: flex-end; justify-content: center; padding: 8px; font-size: 11px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); background-size: cover; }
-.theme.sel { outline: 2px solid #fff; }
-.theme-tag { position: absolute; top: 5px; left: 6px; font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 6px; background: rgba(0, 0, 0, .45); }
-.theme-del { position: absolute; top: 4px; right: 5px; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 6px; background: rgba(0, 0, 0, .45); }
-.theme-del:hover { background: rgba(0, 0, 0, .75); }
+.theme-card { position: relative; height: 64px; }
+.theme { width: 100%; height: 100%; border: 1px solid rgba(255, 255, 255, .3); border-radius: 14px; display: flex; align-items: flex-end; justify-content: center; padding: 8px; font-size: 11px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); background-size: cover; }
+.theme-card.sel .theme { outline: 2px solid #fff; }
+.theme-tag { position: absolute; top: 5px; left: 6px; font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 6px; background: rgba(0, 0, 0, .5); pointer-events: none; }
+.theme-del { position: absolute; top: 4px; right: 5px; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 6px; background: rgba(0, 0, 0, .55); z-index: 2; }
+.theme-del:hover { background: rgba(190, 30, 30, .9); }
 .theme-none { grid-column: 1 / -1; text-align: center; padding: 18px 0; font-size: 12px; }
 
 .theme-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
