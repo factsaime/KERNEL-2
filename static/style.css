@@ -153,6 +153,20 @@ nav .pill.active { border-color: var(--chip-on-border); background: var(--chip-o
 .m { max-width: min(70%, 520px); padding: 10px 12px 6px; background: var(--msg); border-radius: 12px; word-wrap: break-word; white-space: pre-wrap; align-self: flex-start; animation: view-in .22s cubic-bezier(.4, 0, .2, 1) both; }
 .m.me { align-self: flex-end; }
 .m time { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+/* ---------- reactions ---------- */
+.m-reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 20px; }
+.react {
+  padding: 2px 7px; font-size: 12px; line-height: 1.5; border-radius: 999px;
+  background: var(--chip); border: 1px solid transparent; color: var(--text);
+}
+.react.mine { background: var(--chip-on); border-color: var(--chip-on-border); }
+.react-add { padding: 2px 8px; font-size: 12px; border-radius: 999px; background: var(--row); color: var(--muted); opacity: .65; }
+.m:hover .react-add, .react-add:focus { opacity: 1; }
+.m-picker { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; animation: view-in .16s ease both; }
+.m-picker .pick { padding: 3px 6px; font-size: 15px; line-height: 1.2; border-radius: 8px; background: none; }
+.m-picker .pick:hover { background: var(--chip-hover); }
+
 #send { display: flex; align-items: center; margin: 10px 14px 14px; background: var(--send); border: 1px solid var(--line); border-radius: 14px; }
 #send input { background: none; border: 0; }
 #send .plane { background: none; padding: 8px 14px; display: flex; }
