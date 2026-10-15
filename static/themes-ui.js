@@ -1,4 +1,4 @@
-/* Kernel — theme picker + custom gradient builder.
+/* Kernel вЂ” theme picker + custom gradient builder.
    Depends on: window.KERNEL_THEMES (static/themes.js) and the global `api` from app.js. */
 (function () {
   const $id = (id) => document.getElementById(id);
@@ -22,6 +22,55 @@
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
   const hexOk = (v) => /^#[0-9a-fA-F]{6}$/.test(v);
+
+  /* ---------- colour maths ----------
+     A gradient can be light or dark, and 49 of the 66 built-in themes are
+     light. The control palette (text, borders, panels) has to follow, or the
+     UI turns white-on-white. Everything below works in sRGB. */
+  const srgbToLinear = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+
+  function parseHex(hex) {
+    const h = String(hex).replace('#', '');
+    if (h.length !== 6) return null;
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+
+  function relativeLuminance(rgb) {
+    return 0.2126 * srgbToLinear(rgb[0]) + 0.7152 * srgbToLinear(rgb[1]) + 0.0722 * srgbToLinear(rgb[2]);
+  }
+
+  // Mean of a theme's stops, i.e. roughly what the eye averages the gradient to.
+  function themeLuminance(theme) {
+    const rgbs = (theme.stops || [])
+      .map((s) => parseHex(Array.isArray(s) ? s[0] : s))
+      .filter(Boolean);
+    if (!rgbs.length) return 0;
+    const mean = [0, 1, 2].map((i) => rgbs.reduce((a, r) => a + r[i], 0) / rgbs.length);
+    return relativeLuminance(mean);
+  }
+
+  // Whichever of white / near-black contrasts better against the theme.
+  function schemeFor(theme) {
+    const L = themeLuminance(theme);
+    const againstWhite = 1.05 / (L + 0.05);
+    const againstBlack = (L + 0.05) / 0.05;
+    return againstBlack > againstWhite ? 'light' : 'dark';
+  }
+
+  // A card label sits at the bottom edge (align-items: flex-end), so it is read
+  // against the gradient's last stop rather than the average colour.
+  function cardScheme(theme) {
+    const stops = (theme.stops || []).slice().sort((a, b) => a[1] - b[1]);
+    const last = stops.length ? parseHex(stops[stops.length - 1][0]) : null;
+    if (!last) return schemeFor(theme);
+    const L = relativeLuminance(last);
+    const againstWhite = 1.05 / (L + 0.05);
+    const againstBlack = (L + 0.05) / 0.05;
+    return againstBlack > againstWhite ? 'light' : 'dark';
+  }
 
   function buildCSS() {
     const stops = state.stops
@@ -106,6 +155,11 @@
       root.setProperty('--bg', t.grad);
     }
     root.setProperty('--bg-third', t.stops.length > 2 ? t.stops[1][0] : t.stops[0][0]);
+
+    // Flip the control palette to match how light this gradient is, otherwise
+    // white buttons, text and borders vanish on the light themes.
+    document.documentElement.dataset.scheme = schemeFor(t);
+
     active = t.id;
     try { localStorage.setItem('kernel-theme', t.id); } catch {}
     markSelected();
@@ -136,7 +190,7 @@
       theme._armTimer = setTimeout(() => {
         if (!btn.isConnected) return;
         btn.classList.remove('armed');
-        btn.textContent = '✕';
+        btn.textContent = 'вњ•';
         btn.title = 'Удалить тему';
       }, 3500);
       return;
@@ -174,7 +228,7 @@
   // CSS transitions on grid items with `height: auto` do not interpolate, so
   // the card is pinned to its measured size before being collapsed.
   function collapseCard(card, done) {
-    if (reducedMotion()) { done(); return; }
+    if (motionOff()) { done(); return; }
 
     const h = card.getBoundingClientRect().height;
     card.style.height = h + 'px';
@@ -204,7 +258,7 @@
 
   // Fade a freshly added card in.
   function revealCard(card) {
-    if (reducedMotion()) return;
+    if (motionOff()) return;
     card.classList.add('appearing');
     card.addEventListener('animationend', () => card.classList.remove('appearing'), { once: true });
   }
@@ -218,8 +272,20 @@
     box.replaceChildren(p);
   }
 
-  function reducedMotion() {
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // The app owns the motion setting (see the switch in Chat settings). It is
+  // deliberately not tied to prefers-reduced-motion: Windows reports "client
+  // area animations off" there, which used to disable every transition silently.
+  function motionOff() {
+    return document.documentElement.dataset.motion === 'off';
+  }
+
+  const MOTION_KEY = 'kernel-motion';
+
+  function setMotion(on) {
+    document.documentElement.dataset.motion = on ? 'on' : 'off';
+    try { localStorage.setItem(MOTION_KEY, on ? 'on' : 'off'); } catch {}
+    const box = $id('motion-toggle');
+    if (box) box.checked = on;
   }
 
   /* ---------- render: family chips ---------- */
@@ -273,6 +339,14 @@
       pick.style.setProperty('--ta', t.stops[0][0]);
       pick.style.setProperty('--tb', t.stops[t.stops.length - 1][0]);
       pick.style.background = t.grad;
+      // The label and selection ring sit on this card's own gradient, so they
+      // are chosen per card rather than from the page-wide scheme.
+      const cardLight = cardScheme(t) === 'light';
+      pick.style.color = cardLight ? '#0e1116' : '#fff';
+      pick.style.textShadow = cardLight
+        ? '0 1px 2px rgba(255, 255, 255, .55)'
+        : '0 1px 3px rgba(0, 0, 0, .55)';
+      pick.style.setProperty('--ring', cardLight ? '#0e1116' : '#fff');
       pick.append(document.createTextNode(t.name));
       pick.setAttribute('aria-pressed', String(t.id === active));
       pick.setAttribute('title', t.name + (isMine ? ' (моя тема)' : ''));
@@ -289,7 +363,7 @@
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'theme-del';
-        del.textContent = '✕';
+        del.textContent = 'вњ•';
         del.title = 'Удалить тему';
         del.setAttribute('aria-label', 'Удалить тему ' + t.name);
         del.onclick = (e) => {
@@ -340,7 +414,7 @@
     const css = buildCSS();
     $id('tb-preview').style.background = css;
     $id('tb-code').textContent = css;
-    $id('tb-angle-val').textContent = state.angle + '°';
+    $id('tb-angle-val').textContent = state.angle + 'В°';
     $id('tb-angle').value = state.angle;
     $id('tb-angle-field').style.display = state.type === 'radial' ? 'none' : '';
     document.querySelectorAll('#tb-type button').forEach((b) =>
@@ -385,7 +459,7 @@
 
       const del = document.createElement('button');
       del.className = 'stop-del';
-      del.textContent = '✕';
+      del.textContent = 'вњ•';
       del.disabled = state.stops.length <= 2;
       del.setAttribute('aria-label', 'Удалить стоп ' + (i + 1));
       del.onclick = () => {
@@ -469,6 +543,13 @@
   /* ---------- wiring ---------- */
   function init() {
     if (!$id('themes')) return;
+
+    // Motion switch: on by default, and independent of the OS setting.
+    const motionBox = $id('motion-toggle');
+    if (motionBox) {
+      motionBox.checked = document.documentElement.dataset.motion !== 'off';
+      motionBox.onchange = () => setMotion(motionBox.checked);
+    }
 
     $id('theme-search').oninput = renderGrid;
     $id('theme-new').onclick = () => openBuilder(null);

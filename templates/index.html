@@ -8,6 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version) }}">
+<script>
+/* Set the motion mode before first paint. The app owns this setting rather
+   than following prefers-reduced-motion, because Windows reports "client area
+   animations off" there and that used to switch every transition off silently. */
+(function () {
+  var m = null;
+  try { m = localStorage.getItem('kernel-motion'); } catch (e) {}
+  document.documentElement.dataset.motion = m === 'off' ? 'off' : 'on';
+})();
+</script>
 </head>
 <body>
 <svg class="bg-curves" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -102,6 +112,13 @@
         <input id="theme-search" placeholder="поиск темы или HEX…" autocomplete="off">
         <div class="theme-fams" id="theme-fams"></div>
         <div class="themes" id="themes"></div>
+        <label class="switch-row" for="motion-toggle">
+          <span>
+            Плавные переходы
+            <span class="switch-hint">— анимации при переключении и удалении</span>
+          </span>
+          <input type="checkbox" id="motion-toggle" checked>
+        </label>
       </div>
       <div class="row-item" data-open="data"><span>Data and memory</span><i>›</i></div>
       <div class="sub-panel hidden" id="sp-data">
