@@ -106,7 +106,28 @@ function setTab(name, enterMain = true) {
   }
 }
 document.querySelectorAll('nav .pill').forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
-document.querySelectorAll('.back').forEach((b) => (b.onclick = () => { $('app').classList.remove('in-main'); if (tab === 'chats') peer = null; loadList(); }));
+
+// The back arrow leaves the main pane. It must also animate the view that
+// becomes visible again, otherwise returning from Settings snaps instantly.
+document.querySelectorAll('.back').forEach((b) => (b.onclick = () => {
+  const leaving = [...document.querySelectorAll('.view')].find((v) => !v.classList.contains('hidden')) || null;
+  $('app').classList.remove('in-main');
+  if (tab === 'chats') peer = null;
+
+  // On narrow screens the pane swap reveals the sidebar, so animate the
+  // list itself; on desktop the same view stays visible and needs a replay.
+  const target = tab === 'chats' ? $('chat') : $(tab === 'profile' ? 'profile' : 'settings');
+  if (leaving && target === leaving) {
+    animateView(target);
+  } else if (target) {
+    if (leaving) leaving.classList.add('anim-out');
+    setTimeout(() => {
+      if (leaving) leaving.classList.remove('anim-out');
+      animateView(target);
+    }, leaving ? 150 : 0);
+  }
+  loadList();
+}));
 
 /* ---------- chat list ---------- */
 async function loadList() {
