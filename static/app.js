@@ -59,10 +59,27 @@ async function start() {
   timers.push(setInterval(loadList, 4000), setInterval(poll, 1500));
 }
 
+// Replay an entry animation on a view by toggling the class off and on.
+function animateView(el) {
+  if (!el) return;
+  el.classList.remove('anim-in');
+  void el.offsetWidth; // restart the animation instead of ignoring the re-add
+  el.classList.add('anim-in');
+  el.addEventListener('animationend', () => el.classList.remove('anim-in'), { once: true });
+}
+
 function setTab(name, enterMain = true) {
+  const next = name === 'chats' ? 'chat' : name;
+  const target = $(next);
+  // Capture the view currently on screen before the swap hides it.
+  const leaving = [...document.querySelectorAll('.view')].find((v) => v !== target && !v.classList.contains('hidden')) || null;
+  const changed = Boolean(leaving);
+
   tab = name;
+
   document.querySelectorAll('nav .pill').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-  ['chat', 'profile', 'settings'].forEach((v) => $(v).classList.toggle('hidden', v !== (name === 'chats' ? 'chat' : name)));
+  ['chat', 'profile', 'settings'].forEach((v) => $(v).classList.toggle('hidden', v !== next));
+
   if (name === 'profile') renderProfile();
   // Re-pull custom themes whenever settings is opened, so the grid reflects
   // the account instead of a stale first load.
@@ -75,6 +92,17 @@ function setTab(name, enterMain = true) {
     if (!peer) $('app').classList.remove('in-main');
   } else if (enterMain) {
     $('app').classList.add('in-main');
+  }
+
+  // Erase the outgoing view out, then erase the incoming one in.
+  if (changed && target) {
+    leaving.classList.add('anim-out');
+    setTimeout(() => {
+      leaving.classList.remove('anim-out');
+      animateView(target);
+    }, 150);
+  } else {
+    animateView(target);
   }
 }
 document.querySelectorAll('nav .pill').forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));

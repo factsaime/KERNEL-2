@@ -62,20 +62,26 @@ input:focus { border-color: rgba(255, 255, 255, .5); }
 .avatar { flex: none; background: #fff; color: #161616; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 600; text-transform: uppercase; width: 40px; height: 40px; font-size: 12px; }
 .avatar.sm { width: 40px; height: 40px; }
 .avatar.xl { width: 130px; height: 130px; font-size: 32px; border-radius: 16px; }
-nav { display: flex; gap: 8px; padding: 10px; background: rgba(255, 255, 255, .06); }
-.pill { flex: 1; border-radius: 999px; padding: 10px 6px; background: rgba(255, 255, 255, .14); border: 1px solid transparent; }
+nav { display: flex; gap: 8px; padding: 12px 12px 14px; background: rgba(255, 255, 255, .06); }
+.pill { flex: 1; border-radius: 999px; padding: 10px 6px; background: rgba(255, 255, 255, .14); border: 1px solid transparent; transition: background .15s ease, border-color .15s ease; }
 .pill:hover { background: rgba(255, 255, 255, .22); }
 nav .pill.active { border-color: rgba(255, 255, 255, .6); background: rgba(255, 255, 255, .25); }
 
 .view { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-/* Erase in / erase out when switching tabs or opening a panel. */
-.view:not(.hidden) { animation: view-in .28s cubic-bezier(.4, 0, .2, 1) both; }
+/* Erase in / erase out. JS toggles these classes on every tab switch so the
+   animation replays even when the target view was already visible. */
+.view.anim-in { animation: view-in .3s cubic-bezier(.4, 0, .2, 1) both; }
+.view.anim-out { animation: view-out .16s cubic-bezier(.4, 0, .2, 1) both; }
 @keyframes view-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px) scale(.995); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-.sub-panel { animation: view-in .22s cubic-bezier(.4, 0, .2, 1) both; }
-.theme-builder-box { animation: view-in .24s cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes view-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(.995); }
+}
+.sub-panel { animation: view-in .24s cubic-bezier(.4, 0, .2, 1) both; }
+.tb-box { animation: view-in .26s cubic-bezier(.4, 0, .2, 1) both; }
 .bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: rgba(0, 0, 0, .25); border-radius: 0 0 14px 14px; min-height: 56px; }
 .back { padding: 8px 12px; }
 
