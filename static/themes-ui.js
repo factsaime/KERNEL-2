@@ -41,7 +41,18 @@
   }
 
   function toast(msg) {
-    if (typeof window.kernelToast === 'function') window.kernelToast(msg);
+    let box = document.getElementById('kernel-toast');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'kernel-toast';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.textContent = msg;
+    box.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => box.classList.remove('show'), 2600);
   }
 
   /* ---------- my themes: local cache + account sync ---------- */
@@ -270,8 +281,30 @@
   }
 
   function slug(name, taken) {
-    let base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-theme';
-    base = 'my-' + base.slice(0, 30);
+    // Cyrillic (and any non-Latin) names must still yield a stable, readable id.
+    const translit = {
+      а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
+      и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+      с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch',
+      ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+    };
+    const latin = name
+      .toLowerCase()
+      .split('')
+      .map((ch) => (translit[ch] !== undefined ? translit[ch] : ch))
+      .join('')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    // Fall back to a short hash when nothing transliterable is left.
+    let base = latin.slice(0, 30);
+    if (!base) {
+      let h = 0;
+      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+      base = 'theme-' + h.toString(36);
+    }
+    base = 'my-' + base;
+
     let id = base, n = 2;
     while (taken.has(id)) id = base + '-' + n++;
     return id;
@@ -302,9 +335,15 @@
       myThemes.unshift(theme);
     }
 
-    if (await pushThemes()) toast('Тема сохранена');
+    if (await pushThemes()) toast('«' + name + '» сохранена в аккаунте');
     applyTheme(id);
     closeBuilder();
+    // A new theme has family "Моя": if the active filter would hide it,
+    // switch to "Мои" so the user sees what they just saved.
+    if (state.filter !== 'all' && state.filter !== 'mine') {
+      state.filter = 'mine';
+      renderFams();
+    }
     renderGrid();
   }
 

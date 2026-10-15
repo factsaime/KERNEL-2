@@ -150,3 +150,15 @@ input[type="range"] { padding: 0; background: none; border: 0; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .3); }
 .avatar:empty { display: none; }
+
+/* ---------- toast ---------- */
+#kernel-toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 12px);
+  z-index: 40; pointer-events: none; opacity: 0;
+  padding: 10px 16px; border-radius: 12px; font-size: 12px;
+  background: rgba(0, 0, 0, .82); color: #fff; border: 1px solid rgba(255, 255, 255, .22);
+  max-width: min(90vw, 420px); text-align: center;
+  transition: opacity .18s ease, transform .18s ease;
+}
+#kernel-toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { #kernel-toast { transition: none; } }
