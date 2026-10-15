@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import secrets
@@ -72,6 +73,8 @@ def init_db():
         for col in ("about", "address"):
             if col not in cols:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if "theme" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT ''")
 
 
 def api(fn):
@@ -147,12 +150,103 @@ def logout():
 @api
 def me():
     row = db().execute(
-        "SELECT id, username, about, address, created_at FROM users WHERE id = ?", (session["uid"],)
+        "SELECT id, username, about, address, theme, created_at FROM users WHERE id = ?",
+        (session["uid"],),
     ).fetchone()
     if not row:
         session.clear()
         return jsonify(error="unauthorized"), 401
     return jsonify(dict(row))
+
+
+THEME_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+THEME_GRAD_RE = re.compile(r"^(linear|radial|conic)-gradient\([^;{}<>]{1,300}\)$")
+STOP_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+MAX_MY_THEMES = 60
+
+
+def clean_theme(raw):
+    """Validate one user-built theme coming from the client."""
+    if not isinstance(raw, dict):
+        return None, "bad theme"
+    tid = str(raw.get("id", "")).strip().lower()
+    name = str(raw.get("name", "")).strip()
+    grad = str(raw.get("grad", "")).strip()
+    fam = str(raw.get("fam", "Моя")).strip() or "Моя"
+    angle = raw.get("angle", 135)
+    stops = raw.get("stops", [])
+
+    if not THEME_ID_RE.match(tid):
+        return None, "bad theme id"
+    if not name or len(name) > 40:
+        return None, "theme name: 1-40 chars"
+    if len(fam) > 24:
+        return None, "theme family: max 24 chars"
+    if not THEME_GRAD_RE.match(grad):
+        return None, "bad gradient"
+    if isinstance(angle, bool) or not isinstance(angle, (int, float)) or not 0 <= angle <= 360:
+        return None, "bad angle"
+    if not isinstance(stops, list) or not 2 <= len(stops) <= 6:
+        return None, "stops: 2-6 items"
+    for s in stops:
+        if (
+            not isinstance(s, list)
+            or len(s) != 2
+            or not STOP_RE.match(str(s[0]))
+            or isinstance(s[1], bool)
+            or not isinstance(s[1], (int, float))
+            or not 0 <= s[1] <= 100
+        ):
+            return None, "bad stop"
+
+    return {
+        "id": tid,
+        "name": name,
+        "fam": fam,
+        "angle": int(angle),
+        "stops": [[str(c).lower(), int(p)] for c, p in stops],
+        "grad": grad,
+    }, None
+
+
+@app.get("/api/themes")
+@api
+def my_themes():
+    row = db().execute("SELECT theme FROM users WHERE id = ?", (session["uid"],)).fetchone()
+    try:
+        arr = json.loads(row["theme"]) if row and row["theme"] else []
+    except (ValueError, TypeError):
+        arr = []
+    return jsonify(arr if isinstance(arr, list) else [])
+
+
+@app.post("/api/themes")
+@api
+def save_themes():
+    """Persist the signed-in user's custom themes (whole list, max 60)."""
+    body = request.get_json(silent=True) or {}
+    arr = body.get("themes")
+    if not isinstance(arr, list):
+        return jsonify(error="themes must be a list"), 400
+    if len(arr) > MAX_MY_THEMES:
+        return jsonify(error=f"too many themes (max {MAX_MY_THEMES})"), 400
+
+    clean, seen = [], set()
+    for item in arr:
+        t, err = clean_theme(item)
+        if err:
+            return jsonify(error=err), 400
+        if t["id"] in seen:
+            continue
+        seen.add(t["id"])
+        clean.append(t)
+
+    db().execute(
+        "UPDATE users SET theme = ? WHERE id = ?",
+        (json.dumps(clean, ensure_ascii=False), session["uid"]),
+    )
+    db().commit()
+    return jsonify(ok=True, saved=len(clean))
 
 
 @app.post("/api/profile")

@@ -1,8 +1,4 @@
 const $ = (id) => document.getElementById(id);
-const THEMES = {
-  green: ['#24E56E', '#0A6B2C'], white: ['#E8E8E8', '#6B6B6B'], red: ['#FA3131', '#840A0A'],
-  blue: ['#2B2BE8', '#0B0B7A'], purple: ['#8A1CD6', '#3F0A70'], yellow: ['#F2D90A', '#7A6A00'],
-};
 let me = null, peer = null, lastId = 0, registerMode = false, timers = [], tab = 'chats';
 
 async function api(path, method = 'GET', body) {
@@ -19,22 +15,12 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const av = (name, cls = '') => el('span', 'avatar ' + cls, name.slice(0, 2));
 const fmt = (s) => new Date(s.replace(' ', 'T') + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-/* ---------- theme ---------- */
-function applyTheme(name) {
-  const [a, b] = THEMES[name] || THEMES.red;
-  document.documentElement.style.setProperty('--a', a);
-  document.documentElement.style.setProperty('--b', b);
-  try { localStorage.setItem('kernel-theme', name); } catch {}
-  document.querySelectorAll('.theme').forEach((t) => t.classList.toggle('sel', t.dataset.t === name));
+/* ---------- theme (picker + builder live in themes-ui.js) ---------- */
+function applyTheme(id) {
+  if (window.kernelThemes && typeof window.kernelThemes.apply === 'function') {
+    window.kernelThemes.apply(id);
+  }
 }
-Object.entries(THEMES).forEach(([name, [a, b]]) => {
-  const t = el('button', 'theme', 'The ' + name);
-  t.dataset.t = name; t.style.setProperty('--ta', a); t.style.setProperty('--tb', b);
-  t.onclick = () => applyTheme(name);
-  $('themes').append(t);
-});
-let saved = 'red'; try { saved = localStorage.getItem('kernel-theme') || 'red'; } catch {}
-applyTheme(saved);
 
 /* ---------- auth ---------- */
 function showAuth() {
@@ -66,6 +52,10 @@ async function start() {
   document.body.classList.add('in-app');
   setTab('chats', false);
   loadList();
+  if (window.kernelThemes && typeof window.kernelThemes.pull === 'function') {
+    window.kernelThemes.pull().then(() => window.kernelThemes.render());
+  }
+  if (me.theme) applyTheme(me.theme);
   timers.push(setInterval(loadList, 4000), setInterval(poll, 1500));
 }
 

@@ -95,7 +95,12 @@
       </div>
       <div class="row-item" data-open="chat"><span>Chat settings</span><i>›</i></div>
       <div class="sub-panel hidden" id="sp-chat">
-        <div class="muted">choose a theme</div>
+        <div class="theme-head">
+          <div class="muted">choose a theme</div>
+          <button id="theme-new" class="theme-new" type="button">+ своя тема</button>
+        </div>
+        <input id="theme-search" placeholder="поиск темы или HEX…" autocomplete="off">
+        <div class="theme-fams" id="theme-fams"></div>
         <div class="themes" id="themes"></div>
       </div>
       <div class="row-item" data-open="data"><span>Data and memory</span><i>›</i></div>
@@ -107,6 +112,44 @@
   </section>
 </div>
 
+<!-- CUSTOM THEME BUILDER -->
+<div id="theme-builder" class="hidden" role="dialog" aria-modal="true" aria-label="Конструктор темы">
+  <div class="tb-box">
+    <div class="tb-top">
+      <b>Своя тема</b>
+      <button id="tb-close" type="button" class="tb-x" aria-label="Закрыть">✕</button>
+    </div>
+
+    <div class="tb-preview" id="tb-preview"></div>
+    <code class="tb-code" id="tb-code"></code>
+
+    <label class="tb-label" for="tb-name">Название</label>
+    <input id="tb-name" maxlength="40" placeholder="например, Мой закат" autocomplete="off">
+
+    <div class="tb-type" id="tb-type">
+      <button type="button" data-type="linear" aria-pressed="true">Линейный</button>
+      <button type="button" data-type="radial" aria-pressed="false">Радиальный</button>
+      <button type="button" data-type="conic" aria-pressed="false">Конический</button>
+    </div>
+
+    <div id="tb-angle-field">
+      <label class="tb-label" for="tb-angle">Угол: <span id="tb-angle-val">135°</span></label>
+      <input id="tb-angle" type="range" min="0" max="360" step="1" value="135">
+    </div>
+
+    <label class="tb-label">Цветовые стопы</label>
+    <div id="tb-stops" class="tb-stops"></div>
+    <button id="tb-add" type="button" class="tb-ghost">+ добавить стоп</button>
+
+    <div class="tb-actions">
+      <button id="tb-random" type="button" class="tb-ghost">Рандом</button>
+      <button id="tb-save" type="button" class="tb-save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='themes.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='themes-ui.js') }}"></script>
 </body>
 </html>
