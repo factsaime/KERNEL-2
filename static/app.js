@@ -59,13 +59,24 @@ async function start() {
   timers.push(setInterval(loadList, 4000), setInterval(poll, 1500));
 }
 
-// Replay an entry animation on a view by toggling the class off and on.
+// Replay the entry animation. Clearing the classes, forcing a reflow and
+// re-adding is what makes the browser restart it rather than ignore an
+// unchanged class list.
 function animateView(el) {
   if (!el) return;
-  el.classList.remove('anim-in');
-  void el.offsetWidth; // restart the animation instead of ignoring the re-add
+  el.classList.remove('anim-in', 'anim-out');
+  void el.offsetWidth;
   el.classList.add('anim-in');
-  el.addEventListener('animationend', () => el.classList.remove('anim-in'), { once: true });
+  el.addEventListener('animationend', (e) => {
+    if (e.target === el) el.classList.remove('anim-in');
+  }, { once: true });
+}
+
+// Switch views with a single animation. The outgoing view is stripped of its
+// animation class at once, so exactly one animation ever runs per switch.
+function swapView(from, to) {
+  if (from && from !== to) from.classList.remove('anim-in', 'anim-out');
+  animateView(to);
 }
 
 function setTab(name, enterMain = true) {
@@ -73,7 +84,6 @@ function setTab(name, enterMain = true) {
   const target = $(next);
   // Capture the view currently on screen before the swap hides it.
   const leaving = [...document.querySelectorAll('.view')].find((v) => v !== target && !v.classList.contains('hidden')) || null;
-  const changed = Boolean(leaving);
 
   tab = name;
 
@@ -94,38 +104,22 @@ function setTab(name, enterMain = true) {
     $('app').classList.add('in-main');
   }
 
-  // Erase the outgoing view out, then erase the incoming one in.
-  if (changed && target) {
-    leaving.classList.add('anim-out');
-    setTimeout(() => {
-      leaving.classList.remove('anim-out');
-      animateView(target);
-    }, 150);
-  } else {
-    animateView(target);
-  }
+  // One animation per switch: the outgoing view is cleared at once and the
+  // incoming one fades in. Chaining an erase-out first made the motion read
+  // as if it played twice.
+  swapView(leaving, target);
 }
 document.querySelectorAll('nav .pill').forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
 
-// The back arrow leaves the main pane. It must also animate the view that
-// becomes visible again, otherwise returning from Settings snaps instantly.
+// The back arrow leaves the main pane and returns to the chat list; it plays
+// the same single transition as a tab switch.
 document.querySelectorAll('.back').forEach((b) => (b.onclick = () => {
-  const leaving = [...document.querySelectorAll('.view')].find((v) => !v.classList.contains('hidden')) || null;
+  const onScreen = [...document.querySelectorAll('.view')].find((v) => !v.classList.contains('hidden')) || null;
   $('app').classList.remove('in-main');
   if (tab === 'chats') peer = null;
 
-  // On narrow screens the pane swap reveals the sidebar, so animate the
-  // list itself; on desktop the same view stays visible and needs a replay.
   const target = tab === 'chats' ? $('chat') : $(tab === 'profile' ? 'profile' : 'settings');
-  if (leaving && target === leaving) {
-    animateView(target);
-  } else if (target) {
-    if (leaving) leaving.classList.add('anim-out');
-    setTimeout(() => {
-      if (leaving) leaving.classList.remove('anim-out');
-      animateView(target);
-    }, leaving ? 150 : 0);
-  }
+  swapView(onScreen, target);
   loadList();
 }));
 
